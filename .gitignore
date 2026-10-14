@@ -1,0 +1,18 @@
+# Cargo build output (workspace root)
+/target/
+
+# rustfmt backups
+**/*.rs.bk
+
+# MSVC debug info
+*.pdb
+
+# macOS
+.DS_Store
+
+# local env files
+.env
+.env.*
+
+# Agents
+AGENTS.md
