@@ -142,10 +142,12 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
 #[tokio::main]
 async fn main() {
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+    let addr = format!("0.0.0.0:{port}");
     let (tx, _) = broadcast::channel(32);
     let state = AppState { players: Arc::new(Mutex::new(HashMap::new())), tx};
     let app = Router::new().route("/ws", get(ws_handler)).with_state(state);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
 
     axum::serve(listener, app).await.unwrap();
 

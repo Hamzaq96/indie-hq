@@ -138,8 +138,9 @@ impl App {
 async fn main() -> std::io::Result<()> {
     // TODO 1: crossterm terminal init - enable_raw_mode? EnterAlternateScreen?
     let mut terminal = ratatui::init();
-    let name = "hamza".to_string();
-    let (ws_stream, _) = connect_async("ws://127.0.0.1:3000/ws").await.expect("connect failed");
+    let name = std::env::var("INDIE_HQ_NAME").expect("set INDIE_HQ_NAME");
+    let url = std::env::var("INDIE_HQ_URL").unwrap_or_else(|_| "ws://127.0.0.1:3000/ws".to_string());
+    let (ws_stream, _) = connect_async(url).await.expect("connect failed");
     let (mut ws_sender, mut ws_reader) = ws_stream.split();
     let join = ClientMessage::Join { name: name.clone() };
     let txt = serde_json::to_string(&join).unwrap();
