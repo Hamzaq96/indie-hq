@@ -2,13 +2,22 @@
 name = "client"
 version = "0.1.0"
 edition = "2024"
+description = "Terminal client for indie-hq"
+repository = "https://github.com/Hamzaq96/indie-hq"
+
+[[bin]]
+name = "indie-hq"
+path = "src/main.rs"
+
+[package.metadata.dist]
+dist = true
 
 [dependencies]
 protocol = { path = "../protocol" }
 ratatui = "0.29"
 crossterm = "0.28"
 tokio = { version = "1", features = ["full"] }
-tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 serde_json = "1"
 open = "5"
