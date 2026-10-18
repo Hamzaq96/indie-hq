@@ -1,6 +1,6 @@
 [package]
 name = "client"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Terminal client for indie-hq"
 repository = "https://github.com/Hamzaq96/indie-hq"
