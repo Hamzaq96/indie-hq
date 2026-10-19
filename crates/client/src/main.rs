@@ -2,11 +2,15 @@ use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyCode};
 use futures_util::{SinkExt, StreamExt};
-use ratatui::{Frame, layout::Rect, widgets::{Block, Paragraph}};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
 use protocol::{ClientMessage, ServerMessage};
-use tokio::sync::mpsc;
+use ratatui::{
+    Frame,
+    layout::Rect,
+    widgets::{Block, Paragraph},
+};
 use std::collections::HashMap;
+use tokio::sync::mpsc;
+use tokio_tungstenite::{connect_async, tungstenite::Message};
 // TODO: what do you need from protocol? ClientMessage? ServerMessage?
 
 const MAP_W: u16 = 30;
@@ -20,7 +24,9 @@ const CAL_URL: &str = "https://cal.com/placeholder-calendar";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Zone {
-    Focus, Open, Office
+    Focus,
+    Open,
+    Office,
 }
 
 struct App {
@@ -46,21 +52,27 @@ fn discord_url(zone: Zone) -> &'static str {
 fn zone_at(x: u16, _y: u16) -> Zone {
     if x < BOUND1 {
         Zone::Focus
-    }
-    else if x < BOUND2 {
+    } else if x < BOUND2 {
         Zone::Open
-    }
-    else {
+    } else {
         Zone::Office
     }
 }
 
 impl App {
     const MAX_X: u16 = MAP_W - 3;
-    const MAX_Y: u16 = MAP_H -3;
+    const MAX_Y: u16 = MAP_H - 3;
 
     fn new() -> Self {
-        Self { id: None, x: 5, y: 5, others: HashMap::new(), lines: Vec::new(), typing: false, draft: String::new() }
+        Self {
+            id: None,
+            x: 5,
+            y: 5,
+            others: HashMap::new(),
+            lines: Vec::new(),
+            typing: false,
+            draft: String::new(),
+        }
     }
 
     fn current_zone(&self) -> Zone {
@@ -75,7 +87,7 @@ impl App {
                 self.y = self.y.saturating_sub(1);
                 return true;
             }
-            KeyCode::Char('s') | KeyCode::Down=> {
+            KeyCode::Char('s') | KeyCode::Down => {
                 self.y = (self.y.saturating_add(1)).min(Self::MAX_Y);
                 return true;
             }
@@ -87,7 +99,7 @@ impl App {
                 self.x = (self.x.saturating_add(1)).min(Self::MAX_X);
                 return true;
             }
-            _ => { return false }
+            _ => return false,
         }
     }
 
@@ -104,25 +116,43 @@ impl App {
                 let short: String = id.chars().take(8).collect();
                 format!("indie-hq [{:?}] {}", self.current_zone(), short)
             }
-            None => format!("indie-hq [{:?}]", self.current_zone())
+            None => format!("indie-hq [{:?}]", self.current_zone()),
         };
         // TODO: Block with Borders titled "indie-hq"
         // TODO: Paragraph with "@" rendered at (self.x, self.y) inside area?
         // Hint: look at `frame.render_widget(widget, area)` + `Rect::new(x, y, 1, 1)`
         frame.render_widget(Block::bordered().title(title), centered);
         let label_y = centered.y + 1;
-        frame.render_widget(Paragraph::new("FOCUS"), Rect::new(centered.x + 1 + 2, label_y, 5, 1));
-        frame.render_widget(Paragraph::new("OPEN"), Rect::new(centered.x + 1 + 12, label_y, 5, 1));
-        frame.render_widget(Paragraph::new("OFFICE"), Rect::new(centered.x + 1 + 22, label_y, 5, 1));
+        frame.render_widget(
+            Paragraph::new("FOCUS"),
+            Rect::new(centered.x + 1 + 2, label_y, 5, 1),
+        );
+        frame.render_widget(
+            Paragraph::new("OPEN"),
+            Rect::new(centered.x + 1 + 12, label_y, 5, 1),
+        );
+        frame.render_widget(
+            Paragraph::new("OFFICE"),
+            Rect::new(centered.x + 1 + 22, label_y, 5, 1),
+        );
         for dx in [BOUND1, BOUND2] {
-            for dy in 0..MAP_H-2 {
-                frame.render_widget(Paragraph::new("|"), Rect::new(centered.x + 1 + dx, centered.y + 1 + dy, 1, 1));
+            for dy in 0..MAP_H - 2 {
+                frame.render_widget(
+                    Paragraph::new("|"),
+                    Rect::new(centered.x + 1 + dx, centered.y + 1 + dy, 1, 1),
+                );
             }
         }
-        frame.render_widget(Paragraph::new("@"), Rect::new(centered.x + 1 + self.x, centered.y + 1 + self.y, 1, 1));
+        frame.render_widget(
+            Paragraph::new("@"),
+            Rect::new(centered.x + 1 + self.x, centered.y + 1 + self.y, 1, 1),
+        );
 
-        for ( _id, (ox, oy)) in &self.others {
-            frame.render_widget(Paragraph::new("o"), Rect::new(centered.x + 1 + ox, centered.y + 1 + oy, 1, 1));
+        for (_id, (ox, oy)) in &self.others {
+            frame.render_widget(
+                Paragraph::new("o"),
+                Rect::new(centered.x + 1 + ox, centered.y + 1 + oy, 1, 1),
+            );
         }
 
         let start = self.lines.len().saturating_sub(5);
@@ -130,17 +160,29 @@ impl App {
         if self.typing {
             text.push_str(&format!("\n> {}", self.draft));
         }
-        frame.render_widget(Paragraph::new(text), Rect::new(centered.x, centered.y + centered.height, centered.width, 5))
+        frame.render_widget(
+            Paragraph::new(text),
+            Rect::new(centered.x, centered.y + centered.height, centered.width, 5),
+        )
     }
 }
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     // TODO 1: crossterm terminal init - enable_raw_mode? EnterAlternateScreen?
-    let mut terminal = ratatui::init();
-    let name = std::env::var("INDIE_HQ_NAME").expect("set INDIE_HQ_NAME");
-    let url = std::env::var("INDIE_HQ_URL").unwrap_or_else(|_| "ws://127.0.0.1:3000/ws".to_string());
-    let (ws_stream, _) = connect_async(url).await.expect("connect failed");
+    let name = std::env::var("INDIE_HQ_NAME")
+        .or_else(|_| std::env::var("USER"))
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "guest".to_string());
+    let url = std::env::var("INDIE_HQ_URL")
+        .unwrap_or_else(|_| "wss://indie-hq-production.up.railway.app/ws".to_string());
+    let (ws_stream, _) = match connect_async(&url).await {
+        Ok(ws_stream) => ws_stream,
+        Err(e) => {
+            eprintln!("connect failed: {e}");
+            return Ok(());
+        }
+    };
     let (mut ws_sender, mut ws_reader) = ws_stream.split();
     let join = ClientMessage::Join { name: name.clone() };
     let txt = serde_json::to_string(&join).unwrap();
@@ -169,19 +211,28 @@ async fn main() -> std::io::Result<()> {
     });
 
     let mut app = App::new();
+    let mut terminal = ratatui::init();
     // TODO 2: loop { terminal.draw(|f| app.draw(f))?; if event::poll(...)? { if let Event::Key(k) = event::read()? { if k.code == KeyCode::Char('q') { break } else { app.on_key(k.code) } } }
     loop {
         while let Ok(msg) = rx.try_recv() {
             match msg {
                 ServerMessage::Welcome { id } => app.id = Some(id),
-                ServerMessage::Presence { id, name: _, x, y, status: _ } => {
+                ServerMessage::Presence {
+                    id,
+                    name: _,
+                    x,
+                    y,
+                    status: _,
+                } => {
                     // Skip self echo
-                    if app.id.as_ref() == Some(&id) { continue; }
+                    if app.id.as_ref() == Some(&id) {
+                        continue;
+                    }
                     let ux = (x.max(0) as u16).min(App::MAX_X);
                     let uy = (y.max(0) as u16).min(App::MAX_Y);
                     app.others.insert(id, (ux, uy));
-                },
-                ServerMessage::PlayerLeft { id } => { 
+                }
+                ServerMessage::PlayerLeft { id } => {
                     app.others.remove(&id);
                 }
                 ServerMessage::Chat { from, message, .. } => {
@@ -203,9 +254,12 @@ async fn main() -> std::io::Result<()> {
                         }
                         KeyCode::Enter => {
                             if !app.draft.is_empty() {
-                                let msg = serde_json::to_string(&ClientMessage::Chat { message: app.draft.clone(), }).unwrap();
+                                let msg = serde_json::to_string(&ClientMessage::Chat {
+                                    message: app.draft.clone(),
+                                })
+                                .unwrap();
                                 ws_sender.send(Message::Text(msg.into())).await.unwrap();
-                                app.draft.clear(); 
+                                app.draft.clear();
                                 app.typing = false;
                             }
                         }
@@ -214,9 +268,8 @@ async fn main() -> std::io::Result<()> {
                             app.typing = false;
                         }
                         _ => {}
-                     }
-                }
-                else if k.code == KeyCode::Char('q') {
+                    }
+                } else if k.code == KeyCode::Char('q') {
                     break;
                 } else if k.code == KeyCode::Char('V') {
                     let url = discord_url(app.current_zone());
@@ -231,14 +284,17 @@ async fn main() -> std::io::Result<()> {
                 } else {
                     if app.on_key(k.code) {
                         // build Move
-                        let txt = serde_json::to_string(&ClientMessage::Move { x: app.x as i32, y: app.y as i32 }).unwrap();
+                        let txt = serde_json::to_string(&ClientMessage::Move {
+                            x: app.x as i32,
+                            y: app.y as i32,
+                        })
+                        .unwrap();
                         // wrap the move in Message
                         ws_sender.send(Message::Text(txt.into())).await.unwrap();
-                        
-                        }
                     }
                 }
             }
+        }
     }
     // TODO 3: restore terminal on exit
     ratatui::restore();
