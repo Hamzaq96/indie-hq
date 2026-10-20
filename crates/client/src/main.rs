@@ -6,7 +6,7 @@ use protocol::{ClientMessage, ServerMessage};
 use ratatui::{
     Frame,
     layout::Rect,
-    widgets::{Block, Paragraph},
+    widgets::Paragraph,
 };
 use std::collections::HashMap;
 use tokio::sync::mpsc;
@@ -59,6 +59,62 @@ fn zone_at(x: u16, _y: u16) -> Zone {
     }
 }
 
+fn is_wall(x: u16, y: u16) -> bool {
+   let on_divider = x == BOUND1 || x == BOUND2;
+   let in_door = (4..=6).contains(&y);
+   on_divider && !in_door
+}
+
+fn map_grid() -> Vec<String> {
+    let mut rows = Vec::new();
+    for row in 0..MAP_H {
+        let mut line = Vec::with_capacity(MAP_W as usize);
+        for col in 0..MAP_W {
+            let ch = if row == 0 {
+                match col {
+                    0 => '┌',
+                    11 | 21 => '┬',
+                    29 => '┐',
+                    _ => '─',
+                }
+            } else if row == MAP_H - 1 {
+                match col {
+                    0 => '└',
+                    11 | 21 => '┴',
+                    29 => '┘',
+                    _ => '─',
+                }
+            } else if col == 0 || col == MAP_W - 1 {
+                '│'
+            } else if is_wall(col - 1, row - 1) {
+                '│'
+            } else {
+                ' '
+            };
+            line.push(ch);
+        }
+        if row == 1 {
+            for (i, ch) in "FOCUS".chars().enumerate() {
+                line[3 + i] = ch;
+            }
+            for (i, ch) in "OPEN".chars().enumerate() {
+                line[13 + i] = ch;
+            }
+            for (i, ch) in "OFFICE".chars().enumerate() {
+                line[23 + i] = ch;
+            }
+        }
+        rows.push(line.into_iter().collect());
+    }
+    rows
+}
+
+fn face_for(id: &str) -> char {
+    const FACES: &[char]= &['☺', '☻', '♠', '♣', '♥', '♦', '▲', '●'];
+    let n = id.bytes().fold(0usize, |acc, b| acc.wrapping_add(b as usize));
+    FACES[n % FACES.len()]
+}
+
 impl App {
     const MAX_X: u16 = MAP_W - 3;
     const MAX_Y: u16 = MAP_H - 3;
@@ -82,29 +138,32 @@ impl App {
     fn on_key(&mut self, code: KeyCode) -> bool {
         // TODO: match WASD / arrows -> change self.x / self.y
         // TODO: what stops avatar leaving the map? clamp?
-        match code {
-            KeyCode::Char('w') | KeyCode::Up => {
-                self.y = self.y.saturating_sub(1);
-                return true;
-            }
+        let (nx, ny) = match code {
+            KeyCode::Char('w') | KeyCode::Up => (self.x, self.y.saturating_sub(1)),
             KeyCode::Char('s') | KeyCode::Down => {
-                self.y = (self.y.saturating_add(1)).min(Self::MAX_Y);
-                return true;
+                (self.x, (self.y.saturating_add(1)).min(Self::MAX_Y))
             }
-            KeyCode::Char('a') | KeyCode::Left => {
-                self.x = self.x.saturating_sub(1);
-                return true;
-            }
+            KeyCode::Char('a') | KeyCode::Left => (self.x.saturating_sub(1), self.y),
             KeyCode::Char('d') | KeyCode::Right => {
-                self.x = (self.x.saturating_add(1)).min(Self::MAX_X);
-                return true;
+                ((self.x.saturating_add(1)).min(Self::MAX_X), self.y)
             }
             _ => return false,
+        };
+        if is_wall(nx, ny) {
+            return false;
         }
+
+        self.x = nx;
+        self.y = ny;
+        true
     }
 
     fn draw(&self, frame: &mut Frame) {
         let area = frame.area();
+        let face = match &self.id {
+            Some(id) => face_for(id),
+            None => '☺',
+        };
         let centered = Rect::new(
             area.width.saturating_sub(MAP_W) / 2,
             area.height.saturating_sub(MAP_H) / 2,
@@ -118,39 +177,22 @@ impl App {
             }
             None => format!("indie-hq [{:?}]", self.current_zone()),
         };
-        // TODO: Block with Borders titled "indie-hq"
-        // TODO: Paragraph with "@" rendered at (self.x, self.y) inside area?
-        // Hint: look at `frame.render_widget(widget, area)` + `Rect::new(x, y, 1, 1)`
-        frame.render_widget(Block::bordered().title(title), centered);
-        let label_y = centered.y + 1;
-        frame.render_widget(
-            Paragraph::new("FOCUS"),
-            Rect::new(centered.x + 1 + 2, label_y, 5, 1),
-        );
-        frame.render_widget(
-            Paragraph::new("OPEN"),
-            Rect::new(centered.x + 1 + 12, label_y, 5, 1),
-        );
-        frame.render_widget(
-            Paragraph::new("OFFICE"),
-            Rect::new(centered.x + 1 + 22, label_y, 5, 1),
-        );
-        for dx in [BOUND1, BOUND2] {
-            for dy in 0..MAP_H - 2 {
-                frame.render_widget(
-                    Paragraph::new("|"),
-                    Rect::new(centered.x + 1 + dx, centered.y + 1 + dy, 1, 1),
-                );
-            }
+        if centered.y > 0 {
+            frame.render_widget(
+                Paragraph::new(title),
+                Rect::new(centered.x, centered.y - 1, centered.width, 1),
+            );
         }
+        let grid = map_grid();
+        frame.render_widget(Paragraph::new(grid.join("\n")), centered);
         frame.render_widget(
-            Paragraph::new("@"),
+            Paragraph::new(face.to_string()),
             Rect::new(centered.x + 1 + self.x, centered.y + 1 + self.y, 1, 1),
         );
 
-        for (_id, (ox, oy)) in &self.others {
+        for (id, (ox, oy)) in &self.others {
             frame.render_widget(
-                Paragraph::new("o"),
+                Paragraph::new(face_for(id).to_string()),
                 Rect::new(centered.x + 1 + ox, centered.y + 1 + oy, 1, 1),
             );
         }
@@ -238,7 +280,6 @@ async fn main() -> std::io::Result<()> {
                 ServerMessage::Chat { from, message, .. } => {
                     app.lines.push(format!("{from}: {message}"));
                 }
-                _ => {}
             }
         }
         terminal.draw(|frame| app.draw(frame))?;
