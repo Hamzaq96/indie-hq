@@ -12,6 +12,7 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use protocol::{ClientMessage, ServerMessage, zone_at};
 use tokio::sync::broadcast;
+use std::collections::HashSet;
 
 struct Player {
     name: String,
@@ -24,6 +25,16 @@ struct Player {
 struct AppState {
     players: Arc<Mutex<HashMap<String, Player>>>,
     tx: broadcast::Sender<String>,
+    invite_codes: HashSet<String>,
+}
+
+fn load_invite_codes() -> HashSet<String> {
+    std::env::var("INVITE_CODES")
+        .unwrap_or_default()
+        .split(',')
+        .map(|c| c.trim().to_string())
+        .filter(|c| !c.is_empty())
+        .collect()
 }
 
 async fn ws_handler(State(state): State<AppState>, ws: WebSocketUpgrade) -> impl IntoResponse {
@@ -48,7 +59,15 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     Some(Ok(Message::Text(text))) => {
                         let parsed_message: Result<ClientMessage, _> = serde_json::from_str(&text.to_string());
                         match parsed_message {
-                            Ok(ClientMessage::Join {name}) => {
+                            Ok(ClientMessage::Join {name, code}) => {
+                                // Checking invite code 
+                                if !state.invite_codes.contains(&code) {
+                                    let msg = serde_json::to_string(&ServerMessage::Rejected {
+                                        reason: "invalid invite code".into(),
+                                    }).unwrap();
+                                    let _ = sender.send(Message::Text(msg.into())).await;
+                                    return
+                                }
                                 println!("player joined");
                                 // lock players, insert Player.
                                 state.players.lock().unwrap().insert(id.clone(), Player { name: name.clone(), x: 0, y: 0, status: "online".to_string() });
@@ -145,7 +164,8 @@ async fn main() {
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{port}");
     let (tx, _) = broadcast::channel(32);
-    let state = AppState { players: Arc::new(Mutex::new(HashMap::new())), tx};
+    let invite_codes = load_invite_codes();
+    let state = AppState { players: Arc::new(Mutex::new(HashMap::new())), tx, invite_codes};
     let app = Router::new().route("/ws", get(ws_handler)).with_state(state);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
 

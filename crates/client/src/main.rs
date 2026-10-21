@@ -39,6 +39,7 @@ struct App {
     lines: Vec<String>,
     typing: bool,
     draft: String,
+    reason: String,
 }
 
 fn discord_url(zone: Zone) -> &'static str {
@@ -128,6 +129,7 @@ impl App {
             lines: Vec::new(),
             typing: false,
             draft: String::new(),
+            reason: String::new(),
         }
     }
 
@@ -216,6 +218,7 @@ async fn main() -> std::io::Result<()> {
         .or_else(|_| std::env::var("USER"))
         .or_else(|_| std::env::var("USERNAME"))
         .unwrap_or_else(|_| "guest".to_string());
+    let code = std::env::var("INDIE_HQ_CODE").unwrap_or_default();
     let url = std::env::var("INDIE_HQ_URL")
         .unwrap_or_else(|_| "wss://indie-hq-production.up.railway.app/ws".to_string());
     let (ws_stream, _) = match connect_async(&url).await {
@@ -226,7 +229,7 @@ async fn main() -> std::io::Result<()> {
         }
     };
     let (mut ws_sender, mut ws_reader) = ws_stream.split();
-    let join = ClientMessage::Join { name: name.clone() };
+    let join = ClientMessage::Join { name: name.clone(), code };
     let txt = serde_json::to_string(&join).unwrap();
     ws_sender.send(Message::Text(txt.into())).await.unwrap();
     // channel + spawn
@@ -258,6 +261,7 @@ async fn main() -> std::io::Result<()> {
     loop {
         while let Ok(msg) = rx.try_recv() {
             match msg {
+                ServerMessage::Rejected { reason } => app.lines.push(reason),
                 ServerMessage::Welcome { id } => app.id = Some(id),
                 ServerMessage::Presence {
                     id,

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum ClientMessage {
-    Join { name: String },
+    Join { name: String, code: String },
     Move { x: i32, y: i32 },
     Chat { message: String },
     SetStatus { status: String},
@@ -12,6 +12,7 @@ pub enum ClientMessage {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum ServerMessage {
+    Rejected { reason: String },
     Welcome { id: String },
     Presence {
         id: String,
