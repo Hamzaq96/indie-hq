@@ -3,11 +3,7 @@ use std::time::Duration;
 use crossterm::event::{self, Event, KeyCode};
 use futures_util::{SinkExt, StreamExt};
 use protocol::{ClientMessage, ServerMessage};
-use ratatui::{
-    Frame,
-    layout::Rect,
-    widgets::Paragraph,
-};
+use ratatui::{Frame, layout::Rect, widgets::Paragraph};
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
@@ -61,9 +57,9 @@ fn zone_at(x: u16, _y: u16) -> Zone {
 }
 
 fn is_wall(x: u16, y: u16) -> bool {
-   let on_divider = x == BOUND1 || x == BOUND2;
-   let in_door = (4..=6).contains(&y);
-   on_divider && !in_door
+    let on_divider = x == BOUND1 || x == BOUND2;
+    let in_door = (4..=6).contains(&y);
+    on_divider && !in_door
 }
 
 fn map_grid() -> Vec<String> {
@@ -111,8 +107,10 @@ fn map_grid() -> Vec<String> {
 }
 
 fn face_for(id: &str) -> char {
-    const FACES: &[char]= &['☺', '☻', '♠', '♣', '♥', '♦', '▲', '●'];
-    let n = id.bytes().fold(0usize, |acc, b| acc.wrapping_add(b as usize));
+    const FACES: &[char] = &['☺', '☻', '♠', '♣', '♥', '♦', '▲', '●'];
+    let n = id
+        .bytes()
+        .fold(0usize, |acc, b| acc.wrapping_add(b as usize));
     FACES[n % FACES.len()]
 }
 
@@ -229,7 +227,10 @@ async fn main() -> std::io::Result<()> {
         }
     };
     let (mut ws_sender, mut ws_reader) = ws_stream.split();
-    let join = ClientMessage::Join { name: name.clone(), code };
+    let join = ClientMessage::Join {
+        name: name.clone(),
+        code,
+    };
     let txt = serde_json::to_string(&join).unwrap();
     ws_sender.send(Message::Text(txt.into())).await.unwrap();
     // channel + spawn
